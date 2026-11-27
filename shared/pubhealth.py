@@ -1,39 +1,41 @@
-"""Load and clean PUBHEALTH, and read the team's shared train/val/test splits.
+"""Load PUBHEALTH claims using the team's shared split manifest (shared/splits/split_manifest.jsonl).
 
-Cleaning rules (agreed in the proposal, same as the team's first pipeline notebook):
-  - decode HTML entities, strip HTML tags and URLs, collapse whitespace
-  - drop rows with a label outside {false, mixture, true, unproven}
-  - drop empty claims, explanations under 3 words, articles under 20 words
-  - drop duplicate claims (case-insensitive, keep the first) and duplicate claim IDs
+The manifest lists every claim_id in train.tsv and dev.tsv with:
+  disposition   train | validation | test | excluded
+  reason        why a claim was excluded (e.g. holdout_overlap, unresolved_tsv_record)
+  source_file, line_start, line_end, parse_method
+                where the record sits in the TSV and how to parse it. Some fields contain quotes
+                that make pandas' default reader merge rows, so records are read from their exact
+                lines instead.
 
-Splits: official dev.tsv is our test set; cleaned train.tsv is split 90/10 into
-train/val, stratified by label, random_state=42. Run `python -m shared.make_splits`
-to write the ID files in shared/splits/.
+Test = claims from the official dev.tsv; train/validation come from train.tsv.
+
+Text cleaning applied to model inputs: HTML entities decoded, HTML tags and URLs removed,
+whitespace collapsed.
 """
+import csv
 import html
+import io
+import json
 import re
 import zipfile
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_ZIP = REPO_ROOT / "data" / "raw" / "PUBHEALTH.zip"
-SPLITS_DIR = REPO_ROOT / "shared" / "splits"
+MANIFEST = REPO_ROOT / "shared" / "splits" / "split_manifest.jsonl"
 
 LABELS = ["false", "mixture", "true", "unproven"]
-SEED = 42
+SPLITS = {"train": "train", "val": "validation", "test": "test"}  # our name -> manifest disposition
+TSV_COLUMNS = ["claim_id", "claim", "date_published", "explanation", "fact_checkers",
+               "main_text", "sources", "label", "subjects"]
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _URL_RE = re.compile(r"https?://\S+|www\.\S+")
 _WS_RE = re.compile(r"\s+")
-
-
-def read_raw(name, zip_path=DATA_ZIP):
-    """Read one of 'train', 'dev', 'test' straight from the PUBHEALTH zip."""
-    with zipfile.ZipFile(zip_path) as z:
-        with z.open(f"PUBHEALTH/{name}.tsv") as f:
-            return pd.read_csv(f, sep="\t", dtype=str, keep_default_na=False)
 
 
 def clean_text(text):
@@ -43,26 +45,60 @@ def clean_text(text):
     return _WS_RE.sub(" ", text).strip()
 
 
-def clean(df):
-    """Apply the cleaning rules; returns claim_id, claim, explanation, main_text, label."""
-    df = df.copy()
-    df["claim_id"] = df["claim_id"].astype(str).str.strip()
-    df["label"] = df["label"].str.strip().str.lower()
-    df = df[df["label"].isin(LABELS)]
-    for col in ("claim", "explanation", "main_text"):
-        df[col] = df[col].map(clean_text)
-    df = df[df["claim"].str.len() > 0]
-    df = df[df["explanation"].str.split().str.len() >= 3]
-    df = df[df["main_text"].str.split().str.len() >= 20]
-    df = df[~df["claim"].str.lower().duplicated()]
-    df = df[~df["claim_id"].duplicated()]
-    return df[["claim_id", "claim", "explanation", "main_text", "label"]].reset_index(drop=True)
+def read_manifest():
+    with open(MANIFEST, encoding="utf-8") as f:
+        return pd.DataFrame([json.loads(line) for line in f])
+
+
+@lru_cache(maxsize=None)
+def _tsv_lines(name):
+    with zipfile.ZipFile(DATA_ZIP) as z:
+        return z.read(name).decode("utf-8").split("\n")
+
+
+def _parse(row):
+    text = "\n".join(_tsv_lines(row["source_file"])[row["line_start"] - 1:row["line_end"]])
+    if row["parse_method"] == "strict_quoted_tsv":
+        fields = next(csv.reader(io.StringIO(text), delimiter="\t"))
+    else:  # literal_tab_split: quotes are part of the text
+        fields = text.split("\t")
+    record = dict(zip(TSV_COLUMNS, fields))
+    assert len(fields) == len(TSV_COLUMNS) and record["claim_id"].strip() == row["claim_id"], row["claim_id"]
+    return record
+
+
+@lru_cache(maxsize=None)
+def load_records():
+    """Every parseable manifest record (excluded ones too), with its split and cleaned text."""
+    manifest = read_manifest()
+    manifest = manifest[manifest["parse_method"].notna()]
+    rows = []
+    for _, m in manifest.iterrows():
+        r = _parse(m)
+        rows.append({"claim_id": m["claim_id"], "disposition": m["disposition"], "label": m["label"],
+                     "claim": clean_text(r["claim"]), "explanation": clean_text(r["explanation"]),
+                     "main_text": clean_text(r["main_text"])})
+    return pd.DataFrame(rows)
 
 
 def load_split(name):
-    """Cleaned rows of one split ('train', 'val' or 'test'), in the order of its ID file."""
-    ids = pd.read_csv(SPLITS_DIR / f"{name}_ids.csv", dtype=str)
-    source = clean(read_raw("dev" if name == "test" else "train"))
-    out = source.set_index("claim_id").loc[ids["claim_id"]].reset_index()
-    assert (out["label"].values == ids["label"].values).all(), f"{name}: labels differ from the ID file"
-    return out
+    """Claims of one split ('train', 'val' or 'test'): claim_id, claim, explanation, main_text, label."""
+    df = load_records()
+    df = df[df["disposition"] == SPLITS[name]]
+    return df.drop(columns="disposition").reset_index(drop=True).copy()
+
+
+def read_test_tsv_articles():
+    """Article texts of the released test.tsv (its claims have no usable labels; articles only)."""
+    with zipfile.ZipFile(DATA_ZIP) as z:
+        text = z.read("PUBHEALTH/test.tsv").decode("utf-8")
+    rows = list(csv.reader(io.StringIO(text), delimiter="\t"))
+    col = rows[0].index("main_text")
+    return [clean_text(r[col]) for r in rows[1:] if len(r) == len(rows[0])]
+
+
+if __name__ == "__main__":
+    for split in SPLITS:
+        df = load_split(split)
+        counts = df["label"].value_counts().reindex(LABELS).to_dict()
+        print(f"{split:5s} {len(df):5d} claims  {counts}")

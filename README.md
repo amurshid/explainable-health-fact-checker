@@ -42,19 +42,26 @@ All commands below are run from the repo root.
 
 ## Shared splits
 
-- Test set: the official `dev.tsv` (1,214 claims after cleaning).
-- Train/val: the cleaned `train.tsv`, split 90/10, stratified by label, `random_state=42` (8,820 / 981 claims).
-- Cleaning: HTML entities, tags and URLs removed; invalid labels, empty claims, short explanations (<3 words), short articles (<20 words) and duplicate claims dropped.
+Everyone uses the split manifest in [`shared/splits/split_manifest.jsonl`](shared/splits/split_manifest.jsonl),
+one line per claim in `train.tsv` and `dev.tsv`:
 
-The split ID files are committed in [`shared/splits/`](shared/splits/). To regenerate them:
+| Split | Claims | Source |
+|---|---|---|
+| train | 8,745 | `train.tsv` |
+| validation | 972 | `train.tsv` |
+| test | 1,225 | official `dev.tsv` |
+| excluded | 99 | overlap with the held-out set, unparseable records, conflicting duplicates |
 
-```bash
-python -m shared.make_splits
-```
+Each line also says where the record sits in the TSV (`line_start`, `line_end`) and how to parse it, because some
+fields contain quotes that make pandas' default reader merge rows. Text cleaning for model inputs: HTML entities
+decoded, HTML tags and URLs removed, whitespace collapsed.
 
 To load a split in your own code:
 
 ```python
 from shared.pubhealth import load_split
-train = load_split("train")   # claim_id, claim, explanation, main_text, label
+train = load_split("train")   # claim_id, claim, explanation, main_text, label  ("train", "val" or "test")
 ```
+
+`python -m shared.social` shows the three @handle/#hashtag options (keep, remove, replace) and how each model's
+tokenizer splits them.
