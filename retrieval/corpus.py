@@ -1,9 +1,9 @@
 """The article collection that retrieval searches over.
 
-Every unique PUBHEALTH article becomes one candidate: the articles of our train, val
-and test claims, plus the article texts of the released test.tsv (its labels are not
-used; those articles only act as extra candidates, so the search covers all ~12,300
-claims' articles as the proposal says). Identical texts are merged into one article.
+Every unique PUBHEALTH article becomes one candidate: the articles of all claims in the
+split manifest (including excluded ones; only their articles are used), plus the article
+texts of the released test.tsv (its labels are not used). So the search covers all
+~12,300 claims' articles, as the proposal says. Identical texts are merged into one article.
 
 Each article is also split into sentences (used to pick the 3 evidence sentences)
 and into passages of whole sentences of up to ~150 words (used for article search,
@@ -15,7 +15,7 @@ import pickle
 import nltk
 import pandas as pd
 
-from shared.pubhealth import REPO_ROOT, clean_text, load_split, read_raw
+from shared.pubhealth import REPO_ROOT, load_records, load_split, read_test_tsv_articles
 
 OUT_DIR = REPO_ROOT / "outputs" / "retrieval"
 CORPUS_CACHE = OUT_DIR / "corpus.pkl"
@@ -61,11 +61,8 @@ def make_passages(sentences):
 
 
 def build_corpus():
-    texts = []
-    for split in ("train", "val", "test"):
-        texts += load_split(split)["main_text"].tolist()
-    extra = read_raw("test")["main_text"].map(clean_text)
-    texts += [t for t in extra if len(t.split()) >= 20]
+    texts = load_records()["main_text"].tolist() + read_test_tsv_articles()
+    texts = [t for t in texts if len(t.split()) >= 20]  # drop empty or near-empty articles
 
     corpus = pd.DataFrame({"article_id": [article_id(t) for t in texts], "text": texts})
     corpus = corpus.drop_duplicates("article_id").sort_values("article_id").reset_index(drop=True)

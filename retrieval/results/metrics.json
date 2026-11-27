@@ -1,0 +1,65 @@
+{
+ "selected": {
+  "mode": "keep",
+  "epoch": 1
+ },
+ "evidence_k": 3,
+ "results": [
+  {
+   "model": "fine-tuned",
+   "split": "val",
+   "repr": "passages",
+   "mode": "keep",
+   "n_articles": 11948,
+   "top1_accuracy": 0.6965020576131687,
+   "recall_at_5": 0.8960905349794238,
+   "recall_at_10": 0.9207818930041153,
+   "mrr_at_10": 0.7817158207590307,
+   "n_claims": 972,
+   "median_gold_rank": 1.0,
+   "model_path": "/Users/ahnaf/Projects/EDS6352-Final-Project/outputs/retrieval/models/keep/epoch_1"
+  },
+  {
+   "model": "fine-tuned",
+   "split": "test",
+   "repr": "passages",
+   "mode": "keep",
+   "n_articles": 11948,
+   "top1_accuracy": 0.7183673469387755,
+   "recall_at_5": 0.8995918367346939,
+   "recall_at_10": 0.9330612244897959,
+   "mrr_at_10": 0.796527048914804,
+   "n_claims": 1225,
+   "median_gold_rank": 1.0,
+   "model_path": "/Users/ahnaf/Projects/EDS6352-Final-Project/outputs/retrieval/models/keep/epoch_1"
+  },
+  {
+   "model": "pretrained",
+   "split": "val",
+   "repr": "passages",
+   "mode": "keep",
+   "n_articles": 11948,
+   "top1_accuracy": 0.6718106995884774,
+   "recall_at_5": 0.8641975308641975,
+   "recall_at_10": 0.8991769547325102,
+   "mrr_at_10": 0.7523638056045463,
+   "n_claims": 972,
+   "median_gold_rank": 1.0,
+   "model_path": "sentence-transformers/all-MiniLM-L6-v2"
+  },
+  {
+   "model": "pretrained",
+   "split": "test",
+   "repr": "passages",
+   "mode": "keep",
+   "n_articles": 11948,
+   "top1_accuracy": 0.6840816326530612,
+   "recall_at_5": 0.876734693877551,
+   "recall_at_10": 0.916734693877551,
+   "mrr_at_10": 0.765309361839974,
+   "n_claims": 1225,
+   "median_gold_rank": 1.0,
+   "model_path": "sentence-transformers/all-MiniLM-L6-v2"
+  }
+ ]
+}
