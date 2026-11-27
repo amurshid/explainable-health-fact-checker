@@ -1,0 +1,32 @@
+# Conda env for the PUBHEALTH fact-checking notebook.
+#   conda env create -f environment.yml
+#   conda activate eds6352-final
+# transformers / bert-score / rouge-score are pinned to the versions the notebook's full run used.
+# PyTorch comes from conda-forge (not pip) so only one OpenMP runtime is loaded; mixing the pip torch
+# wheel with conda-forge numpy/scikit-learn crashes on macOS ("OMP: Error #15"). The conda-forge build
+# supports the Apple GPU (MPS). On Linux with an NVIDIA GPU conda-forge picks a CUDA build automatically.
+name: eds6352-final
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pytorch
+  - numpy
+  - pandas
+  - matplotlib
+  - scikit-learn
+  - tqdm
+  - psutil
+  - nltk
+  - ipykernel
+  - ipywidgets
+  - jupyterlab
+  - pip:
+      - transformers==4.57.6
+      - sentencepiece
+      - protobuf
+      - tiktoken
+      - bert-score==0.3.13
+      - rouge-score==0.1.2
+      - sentence-transformers>=5,<6

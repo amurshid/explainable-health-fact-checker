@@ -1,0 +1,17 @@
+# Data (download PUBHEALTH yourself, see README)
+data/
+*.zip
+
+# Model checkpoints, embeddings, run outputs
+outputs/
+*.pt
+*.safetensors
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
